@@ -30,9 +30,6 @@ namespace DrawBatching
             _texA = Content.Load<Texture>("Textures/burg.png");
             
             _texB = Content.Load<Texture>("Textures/pentagram.png");
-            _texB.VirtualResolution = new Size(256, 256);
-            _texB.FilteringMode = TextureFilteringMode.NearestNeighbor;
-            
             _texC = Content.Load<Texture>("Textures/walls.jpeg");
         }
 

@@ -43,6 +43,9 @@ namespace Chroma.Input
             if (texture.Disposed)
                 throw new InvalidOperationException("The texture you provided was previously disposed.");
 
+            if (texture.SurfaceHandle == IntPtr.Zero)
+                throw new InvalidOperationException("The texture provided had no surface attached.");
+
             Texture = new Texture(texture);
             HotSpot = hotSpot;
 
@@ -72,7 +75,7 @@ namespace Chroma.Input
 
         private void Initialize()
         {
-            _sdlTextureHandle = Texture.AsSdlSurface();
+            _sdlTextureHandle = Texture.SurfaceHandle;
             
             _cursorHandle = SDL2.SDL_CreateColorCursor(
                 _sdlTextureHandle,

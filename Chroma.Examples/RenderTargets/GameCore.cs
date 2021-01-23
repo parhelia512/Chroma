@@ -40,9 +40,6 @@ namespace RenderTargets
 
         protected override void Draw(RenderContext context)
         {
-            if (context.ShapeBlendingEnabled)
-                context.ShapeBlendingEnabled = false;
-
             context.RenderTo(_tgt, () =>
             {
                 context.Clear(Color.Black);
@@ -54,9 +51,9 @@ namespace RenderTargets
 
             context.DrawTexture(
                 _tgt,
-                Window.Center,
+                Vector2.Zero,
                 Vector2.One,
-                _tgt.Center,
+                Window.Center,
                 _rotation
             );
 

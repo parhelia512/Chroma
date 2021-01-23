@@ -13,10 +13,12 @@ namespace Chroma.Graphics
     public class GraphicsManager
     {
         private readonly Log _log = LogManager.GetForCurrentAssembly();
-        
+
         private VerticalSyncMode _verticalSyncMode;
 
         private Game Game { get; }
+
+        internal static IntPtr Renderer { get; private set; }
 
         public bool ViewportAutoResize { get; set; } = true;
         public bool LimitFramerate { get; set; } = true;
@@ -68,10 +70,10 @@ namespace Chroma.Graphics
             set => SDL2.SDL_SetWindowBrightness(Game.Window.Handle, value);
         }
 
-        public bool IsDefaultShaderActive
-            => SDL_gpu.GPU_IsDefaultShaderProgram(SDL_gpu.GPU_GetCurrentShaderProgram());
+        // public bool IsDefaultShaderActive
+        //     => SDL_gpu.GPU_IsDefaultShaderProgram(SDL_gpu.GPU_GetCurrentShaderProgram());
 
-        public List<string> GlExtensions { get; } = new List<string>();
+        public List<string> GlExtensions { get; } = new();
 
         internal GraphicsManager(Game game)
         {
@@ -79,16 +81,10 @@ namespace Chroma.Graphics
 
             ProbeGlLimits(
                 preProbe: () => { },
-                probe: () =>
-                {
-                    EnumerateGlExtensions();
-                }, 
+                probe: () => { EnumerateGlExtensions(); },
                 postProbe: () => { }
             );
         }
-
-        public List<string> GetRendererNames()
-            => GetRegisteredRenderers().Select(x => $"{x.name} ({x.major_version}.{x.minor_version})").ToList();
 
         public List<Display> GetDisplayList()
         {
@@ -115,47 +111,20 @@ namespace Chroma.Graphics
             return null;
         }
 
-        internal IntPtr InitializeRenderer(Window window)
+        internal void InitializeRenderer(Window window)
         {
-            var rendererId = FindBestRenderer();
-
-            var renderTargetHandle = SDL_gpu.GPU_InitRendererByID(
-                rendererId,
-                (ushort)window.Size.Width,
-                (ushort)window.Size.Height,
-                0
+            Renderer = SDL2.SDL_CreateRenderer(
+                window.Handle,
+                -1,
+                SDL2.SDL_RendererFlags.SDL_RENDERER_ACCELERATED
+                | SDL2.SDL_RendererFlags.SDL_RENDERER_PRESENTVSYNC
+                | SDL2.SDL_RendererFlags.SDL_RENDERER_TARGETTEXTURE
             );
 
-            if (renderTargetHandle == IntPtr.Zero)
-                throw new FrameworkException("Failed to initialize the renderer.", true);
-
-            _log.Info($"{OpenGlVendorString} {OpenGlRendererString} v{OpenGlVersionString}");
-
-            _log.Info(" Available displays:");
-            foreach (var d in GetDisplayList())
-                _log.Info($"  Display {d.Index} ({d.Name}) [{d.Bounds.Width}x{d.Bounds.Height}], mode {d.DesktopMode}");
-
-            return renderTargetHandle;
-        }
-
-        private SDL_gpu.GPU_RendererID FindBestRenderer()
-            => GetRegisteredRenderers()
-                .OrderByDescending(x => x.major_version)
-                .First();
-
-        private List<SDL_gpu.GPU_RendererID> GetRegisteredRenderers()
-        {
-            var renderers = SDL_gpu.GPU_GetNumRegisteredRenderers();
-            var registeredRenderers = new SDL_gpu.GPU_RendererID[renderers];
-            SDL_gpu.GPU_GetRegisteredRendererList(registeredRenderers);
-
-            if (registeredRenderers.Length == 0)
+            if (Renderer == IntPtr.Zero)
             {
-                throw new NotSupportedException("None of Chroma's Rendering APIs are supported on this computer. " +
-                                                "Make sure you have support for at least OpenGL 3.");
+                throw new FrameworkException("Failed to initialize the renderer.", true);
             }
-
-            return registeredRenderers.ToList();
         }
 
         private void EnumerateGlExtensions()
@@ -188,13 +157,11 @@ namespace Chroma.Graphics
         {
             preProbe();
 
-            var gpuRendererId = FindBestRenderer();
-
             _log.WarningWhenFails(
                 $"Failed to set OpenGL major version for probe",
                 () => SDL2.SDL_GL_SetAttribute(
                     SDL2.SDL_GLattr.SDL_GL_CONTEXT_MAJOR_VERSION,
-                    gpuRendererId.major_version
+                    4
                 )
             );
 
@@ -202,7 +169,7 @@ namespace Chroma.Graphics
                 $"Failed to set OpenGL minor version for probe",
                 () => SDL2.SDL_GL_SetAttribute(
                     SDL2.SDL_GLattr.SDL_GL_CONTEXT_MINOR_VERSION,
-                    gpuRendererId.minor_version
+                    0
                 )
             );
 

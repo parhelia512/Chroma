@@ -13,7 +13,6 @@
         <EmbeddedResource Include="Binaries\windows_64\libtiff-5.bz2" />
         <EmbeddedResource Include="Binaries\windows_64\libwebp-7.bz2" />
         <EmbeddedResource Include="Binaries\windows_64\SDL2.bz2" />
-        <EmbeddedResource Include="Binaries\windows_64\SDL2_gpu.bz2" />
         <EmbeddedResource Include="Binaries\windows_64\SDL2_image.bz2" />
         <EmbeddedResource Include="Binaries\windows_64\SDL2_nmix.bz2" />
         <EmbeddedResource Include="Binaries\windows_64\SDL2_sound.bz2" />
@@ -23,7 +22,6 @@
         <EmbeddedResource Include="Binaries\linux_64\libpng16.bz2" />
         <EmbeddedResource Include="Binaries\linux_64\libtiff.bz2" />
         <EmbeddedResource Include="Binaries\linux_64\libSDL2.bz2" />
-        <EmbeddedResource Include="Binaries\linux_64\libSDL2_gpu.bz2" />
         <EmbeddedResource Include="Binaries\linux_64\libSDL2_image.bz2" />
         <EmbeddedResource Include="Binaries\linux_64\libSDL2_nmix.bz2" />
         <EmbeddedResource Include="Binaries\linux_64\libSDL2_sound.bz2" />

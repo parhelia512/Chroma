@@ -32,8 +32,7 @@ namespace Chroma.Graphics.Particles
                 throw new ArgumentException("Texture provided was already disposed.", nameof(texture));
 
             Texture = texture;
-            Texture.UseBlending = true;
-            Texture.SetBlendingMode(BlendingPreset.NormalAddAlpha);
+            Texture.SetBlending(BlendingMode.AlphaBlend);
 
             _stateIntegrators = new List<ParticleStateIntegrator>();
             _particles = new List<Particle>(1200);

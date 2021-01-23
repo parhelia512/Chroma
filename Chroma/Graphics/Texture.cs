@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Drawing;
 using System.IO;
 using System.Numerics;
 using Chroma.Diagnostics.Logging;
@@ -12,24 +11,25 @@ namespace Chroma.Graphics
     public class Texture : DisposableResource
     {
         private readonly Log _log = LogManager.GetForCurrentAssembly();
-
-        internal IntPtr ImageHandle { get; private set; }
-        internal unsafe SDL_gpu.GPU_Image* Image => (SDL_gpu.GPU_Image*)ImageHandle.ToPointer();
-
         private byte[] _pixelData;
 
-        public PixelFormat Format { get; private set; }
+        internal IntPtr Handle { get; private set; }
+        internal IntPtr SurfaceHandle { get; private set; }
 
+        public PixelFormat Format { get; private set; }
+        
         public int Width
         {
             get
             {
                 EnsureNotDisposed();
 
-                unsafe
-                {
-                    return Image->texture_w;
-                }
+                // todo error handling
+                SDL2.SDL_QueryTexture(
+                    Handle, out _, out _, out var width, out _
+                );
+
+                return width;
             }
         }
 
@@ -39,19 +39,12 @@ namespace Chroma.Graphics
             {
                 EnsureNotDisposed();
 
-                unsafe
-                {
-                    return Image->texture_h;
-                }
-            }
-        }
+                // todo error handling
+                SDL2.SDL_QueryTexture(
+                    Handle, out _, out _, out _, out var height
+                );
 
-        public Vector2 AbsoluteCenter
-        {
-            get
-            {
-                EnsureNotDisposed();
-                return new Vector2(Width / 2f, Height / 2f);
+                return height;
             }
         }
 
@@ -60,235 +53,11 @@ namespace Chroma.Graphics
             get
             {
                 EnsureNotDisposed();
-
-                if (VirtualResolution.HasValue && IsVirtualized)
-                {
-                    return new Vector2(
-                        VirtualResolution.Value.Width / 2f,
-                        VirtualResolution.Value.Height / 2f
-                    );
-                }
-                else return AbsoluteCenter;
-            }
-        }
-
-        public Vector2 Anchor
-        {
-            get
-            {
-                EnsureNotDisposed();
-
-                unsafe
-                {
-                    return new Vector2(
-                        Image->anchor_x,
-                        Image->anchor_y
-                    );
-                }
-            }
-
-            set
-            {
-                EnsureNotDisposed();
-
-                SDL_gpu.GPU_SetAnchor(
-                    ImageHandle,
-                    value.X,
-                    value.Y
-                );
-            }
-        }
-
-        public TextureWrappingMode HorizontalWrappingMode
-        {
-            get
-            {
-                EnsureNotDisposed();
-
-                unsafe
-                {
-                    return (TextureWrappingMode)Image->wrap_mode_x;
-                }
-            }
-
-            set
-            {
-                EnsureNotDisposed();
-
-                unsafe
-                {
-                    SDL_gpu.GPU_SetWrapMode(
-                        ImageHandle,
-                        (SDL_gpu.GPU_WrapEnum)value,
-                        Image->wrap_mode_y
-                    );
-                }
-            }
-        }
-
-        public TextureWrappingMode VerticalWrappingMode
-        {
-            get
-            {
-                EnsureNotDisposed();
-
-                unsafe
-                {
-                    return (TextureWrappingMode)Image->wrap_mode_y;
-                }
-            }
-
-            set
-            {
-                EnsureNotDisposed();
-
-                unsafe
-                {
-                    SDL_gpu.GPU_SetWrapMode(
-                        ImageHandle,
-                        Image->wrap_mode_x,
-                        (SDL_gpu.GPU_WrapEnum)value
-                    );
-                }
-            }
-        }
-
-        public bool UseBlending
-        {
-            get
-            {
-                EnsureNotDisposed();
-
-                unsafe
-                {
-                    return Image->use_blending;
-                }
-            }
-
-            set
-            {
-                EnsureNotDisposed();
-                SDL_gpu.GPU_SetBlending(ImageHandle, value);
-            }
-        }
-
-        public BlendingEquation ColorBlendingEquation
-        {
-            get
-            {
-                EnsureNotDisposed();
-
-                unsafe
-                {
-                    return (BlendingEquation)Image->blend_mode.color_equation;
-                }
-            }
-        }
-
-        public BlendingFunction SourceColorBlendingFunction
-        {
-            get
-            {
-                EnsureNotDisposed();
-
-                unsafe
-                {
-                    return (BlendingFunction)Image->blend_mode.source_color;
-                }
-            }
-        }
-
-        public BlendingFunction DestinationColorBlendingFunction
-        {
-            get
-            {
-                EnsureNotDisposed();
-
-                unsafe
-                {
-                    return (BlendingFunction)Image->blend_mode.dest_color;
-                }
-            }
-        }
-
-        public BlendingEquation AlphaBlendingEquation
-        {
-            get
-            {
-                EnsureNotDisposed();
-
-                unsafe
-                {
-                    return (BlendingEquation)Image->blend_mode.alpha_equation;
-                }
-            }
-        }
-
-        public BlendingFunction SourceAlphaBlendingFunction
-        {
-            get
-            {
-                EnsureNotDisposed();
-
-                unsafe
-                {
-                    return (BlendingFunction)Image->blend_mode.source_color;
-                }
-            }
-        }
-
-        public BlendingFunction DestinationAlphaBlendingFunction
-        {
-            get
-            {
-                EnsureNotDisposed();
-
-                unsafe
-                {
-                    return (BlendingFunction)Image->blend_mode.dest_color;
-                }
+                return new Vector2(Width / 2f, Height / 2f);
             }
         }
 
         public int BytesPerPixel { get; private set; }
-
-        public TextureFilteringMode FilteringMode
-        {
-            get
-            {
-                EnsureNotDisposed();
-
-                unsafe
-                {
-                    return (TextureFilteringMode)Image->filter_mode;
-                }
-            }
-
-            set
-            {
-                EnsureNotDisposed();
-                SDL_gpu.GPU_SetImageFilter(ImageHandle, (SDL_gpu.GPU_FilterEnum)value);
-            }
-        }
-
-        public TextureSnappingMode SnappingMode
-        {
-            get
-            {
-                EnsureNotDisposed();
-
-                unsafe
-                {
-                    return (TextureSnappingMode)Image->snap_mode;
-                }
-            }
-
-            set
-            {
-                EnsureNotDisposed();
-                SDL_gpu.GPU_SetSnapMode(ImageHandle, (SDL_gpu.GPU_SnapEnum)value);
-            }
-        }
 
         public Color ColorMask
         {
@@ -296,65 +65,38 @@ namespace Chroma.Graphics
             {
                 EnsureNotDisposed();
 
-                unsafe
-                {
-                    return Color.FromSdlColor(Image->color);
-                }
-            }
+                // todo error handling
+                SDL2.SDL_GetTextureColorMod(
+                    Handle,
+                    out var r,
+                    out var g,
+                    out var b
+                );
 
-            set
-            {
-                EnsureNotDisposed();
-                SDL_gpu.GPU_SetColor(ImageHandle, Color.ToSdlColor(value));
-            }
-        }
+                SDL2.SDL_GetTextureAlphaMod(
+                    Handle,
+                    out var a
+                );
 
-        private Size? _virtualResolution;
-
-        public Size? VirtualResolution
-        {
-            get
-            {
-                EnsureNotDisposed();
-
-                if (!_virtualResolution.HasValue)
-                {
-                    _virtualResolution = new Size(Width, Height);
-                }
-
-                return _virtualResolution;
+                return new Color(r, g, b, a);
             }
 
             set
             {
                 EnsureNotDisposed();
 
-                if (value == null)
-                {
-                    _virtualResolution = new Size(Width, Height);
-                    SDL_gpu.GPU_UnsetImageVirtualResolution(ImageHandle);
-                }
-                else
-                {
-                    _virtualResolution = value;
-                    SDL_gpu.GPU_SetImageVirtualResolution(
-                        ImageHandle,
-                        (ushort)_virtualResolution.Value.Height,
-                        (ushort)_virtualResolution.Value.Width
-                    );
-                }
-            }
-        }
+                // todo
+                SDL2.SDL_SetTextureColorMod(
+                    Handle,
+                    value.R,
+                    value.G,
+                    value.B
+                );
 
-        public bool IsVirtualized
-        {
-            get
-            {
-                EnsureNotDisposed();
-
-                return VirtualResolution.HasValue
-                       && (VirtualResolution.Value.Height != Height
-                           || VirtualResolution.Value.Width != Width);
+                SDL2.SDL_SetTextureAlphaMod(
+                    Handle,
+                    value.A
+                );
             }
         }
 
@@ -366,6 +108,8 @@ namespace Chroma.Graphics
             set => SetPixel(x, y, value);
         }
 
+        public TextureType Type { get; }
+
         public Texture(Stream stream)
         {
             EnsureOnMainThread();
@@ -373,6 +117,8 @@ namespace Chroma.Graphics
             var bytes = new byte[stream.Length];
             stream.Read(bytes, 0, bytes.Length);
 
+            Type = TextureType.Static;
+            
             unsafe
             {
                 fixed (byte* bp = &bytes[0])
@@ -386,7 +132,6 @@ namespace Chroma.Graphics
             }
 
             Flush();
-            SnappingMode = TextureSnappingMode.None;
         }
 
         public Texture(string filePath)
@@ -401,20 +146,24 @@ namespace Chroma.Graphics
             if (other.Disposed)
                 throw new InvalidOperationException("The source texture has been disposed.");
 
+            Type = other.Type;
+
+            if (other.SurfaceHandle != IntPtr.Zero)
+            {
+                SurfaceHandle = SDL2.SDL_DuplicateSurface(other.SurfaceHandle);
+            }
+
             CreateEmpty(
                 other.Width,
                 other.Height,
-                other.Format,
-                true
+                other.Format
             );
 
             CopyDataFrom(other);
             Flush();
-
-            SnappingMode = TextureSnappingMode.None;
         }
 
-        public Texture(int width, int height, PixelFormat pixelFormat = PixelFormat.RGBA)
+        public Texture(int width, int height, TextureType type = TextureType.Streaming, PixelFormat pixelFormat = PixelFormat.RGBA)
         {
             EnsureOnMainThread();
 
@@ -423,80 +172,50 @@ namespace Chroma.Graphics
 
             if (height < 0)
                 throw new ArgumentOutOfRangeException(nameof(height), "Height cannot be negative.");
-
-            CreateEmpty(
-                (ushort)width,
-                (ushort)height,
-                pixelFormat,
-                true
-            );
-            Flush();
-
-            SnappingMode = TextureSnappingMode.None;
-        }
-
-        public Texture(int width, int height, byte[] data, PixelFormat pixelFormat = PixelFormat.RGBA)
-        {
-            EnsureOnMainThread();
             
+            Type = type;
+
+            CreateEmpty(
+                (ushort)width,
+                (ushort)height,
+                pixelFormat
+            );
+
+            Flush();
+        }
+
+        public Texture(int width, int height, byte[] data, TextureType type, PixelFormat pixelFormat = PixelFormat.RGBA)
+        {
+            EnsureOnMainThread();
+
             if (width < 0)
                 throw new ArgumentOutOfRangeException(nameof(width), "Width cannot be negative.");
 
             if (height < 0)
                 throw new ArgumentOutOfRangeException(nameof(height), "Height cannot be negative.");
 
+            Type = type;
+            
             CreateEmpty(
                 (ushort)width,
                 (ushort)height,
-                pixelFormat,
-                true
+                pixelFormat
             );
 
             data.CopyTo(_pixelData, 0);
             Flush();
-            
-            SnappingMode = TextureSnappingMode.None;
         }
 
-        internal Texture(IntPtr gpuImageHandle)
+        public Texture(IntPtr surfaceHandle)
         {
-            EnsureOnMainThread();
-
-            if (gpuImageHandle == IntPtr.Zero)
-                throw new ArgumentException("Invalid image handle.");
-
-            ImageHandle = gpuImageHandle;
-
-            InitializeWithSurface(
-                SDL_gpu.GPU_CopySurfaceFromImage(gpuImageHandle)
-            );
-
-            SnappingMode = TextureSnappingMode.None;
+            InitializeWithSurface(surfaceHandle);
+            Flush();
         }
 
-        public void SetBlendingEquations(BlendingEquation colorBlend, BlendingEquation alphaBlend)
+        public void SetBlending(BlendingMode mode)
         {
-            EnsureNotDisposed();
-
-            SDL_gpu.GPU_SetBlendEquation(
-                ImageHandle,
-                (SDL_gpu.GPU_BlendEqEnum)colorBlend,
-                (SDL_gpu.GPU_BlendEqEnum)alphaBlend
-            );
-        }
-
-        public void SetBlendingFunctions(BlendingFunction sourceColorBlend, BlendingFunction sourceAlphaBlend,
-            BlendingFunction destinationColorBlend, BlendingFunction destinationAlphaBlend)
-        {
-            EnsureNotDisposed();
-
-            SDL_gpu.GPU_SetBlendFunction(
-                ImageHandle,
-                (SDL_gpu.GPU_BlendFuncEnum)sourceColorBlend,
-                (SDL_gpu.GPU_BlendFuncEnum)destinationColorBlend,
-                (SDL_gpu.GPU_BlendFuncEnum)sourceAlphaBlend,
-                (SDL_gpu.GPU_BlendFuncEnum)destinationAlphaBlend
-            );
+            // todo error handling
+            SDL2.SDL_SetTextureBlendMode(Handle, (SDL2.SDL_BlendMode)mode);
         }
 
         public void SetPixelData(Color[] colors)
@@ -551,7 +270,7 @@ namespace Chroma.Graphics
                 return;
             }
 
-            var imgRect = new SDL_gpu.GPU_Rect
+            var imgRect = new SDL2.SDL_Rect
             {
                 x = 0,
                 y = 0,
@@ -559,79 +278,37 @@ namespace Chroma.Graphics
                 h = Height
             };
 
-            SDL_gpu.GPU_UpdateImageBytes(
-                ImageHandle,
-                ref imgRect,
-                _pixelData,
-                Stride
-            );
-        }
-
-        public void SaveToFile(string filePath, ImageFileFormat format)
-        {
-            EnsureNotDisposed();
-
-            if (!SDL_gpu.GPU_SaveImage(ImageHandle, filePath, (SDL_gpu.GPU_FileFormatEnum)format))
-            {
-                _log.Error($"Saving texture to file failed: {SDL2.SDL_GetError()}");
-            }
-        }
-
-        public void SaveToArray(byte[] buffer, ImageFileFormat format)
-        {
-            EnsureNotDisposed();
-
             unsafe
             {
-                fixed (byte* ptr = &buffer[0])
+                fixed (byte* data = _pixelData)
                 {
-                    var rwops = SDL2.SDL_RWFromMem(new IntPtr(ptr), buffer.Length);
-                    if (!SDL_gpu.GPU_SaveImage_RW(ImageHandle, rwops, true, (SDL_gpu.GPU_FileFormatEnum)format))
-                    {
-                        _log.Error($"Writing texture to memory failed: {SDL2.SDL_GetError()}");
-                    }
+                    SDL2.SDL_UpdateTexture(
+                        Handle,
+                        ref imgRect,
+                        new IntPtr(data),
+                        Stride
+                    );
                 }
             }
         }
-
-        public void SetBlendingMode(BlendingPreset preset)
+        
+        private unsafe void InitializeWithSurface(IntPtr surfaceHandle)
         {
-            EnsureNotDisposed();
-
-            SDL_gpu.GPU_SetBlendMode(
-                ImageHandle,
-                (SDL_gpu.GPU_BlendPresetEnum)preset
-            );
-        }
-
-        public void GenerateMipMaps()
-        {
-            EnsureNotDisposed();
-            SDL_gpu.GPU_GenerateMipmaps(ImageHandle);
-        }
-
-        internal IntPtr AsSdlSurface()
-            => SDL_gpu.GPU_CopySurfaceFromImage(ImageHandle);
-
-        private unsafe void InitializeWithSurface(IntPtr imageSurfaceHandle)
-        {
-            IntPtr rgbaSurfaceHandle;
             SDL2.SDL_Surface* rgbaSurface;
 
-            rgbaSurfaceHandle = SDL2.SDL_ConvertSurfaceFormat(
-                imageSurfaceHandle,
-                SDL2.SDL_PIXELFORMAT_ABGR8888, // endianness? pixel order still confuses me sometimes
+            SurfaceHandle = SDL2.SDL_ConvertSurfaceFormat(
+                surfaceHandle,
+                SDL2.SDL_PIXFMT_ABGR8888, // endianness? pixel order still confuses me sometimes
                 0
             );
 
-            SDL2.SDL_FreeSurface(imageSurfaceHandle);
-            rgbaSurface = (SDL2.SDL_Surface*)rgbaSurfaceHandle.ToPointer();
+            SDL2.SDL_FreeSurface(surfaceHandle);
+            rgbaSurface = (SDL2.SDL_Surface*)SurfaceHandle.ToPointer();
 
             CreateEmpty(
                 rgbaSurface->w,
                 rgbaSurface->h,
-                PixelFormat.RGBA,
-                ImageHandle == IntPtr.Zero
+                PixelFormat.RGBA
             );
 
             var pixels = (byte*)rgbaSurface->pixels.ToPointer();
@@ -641,10 +318,13 @@ namespace Chroma.Graphics
             for (var i = 0; i < dataLength; i++)
                 _pixelData[i] = pixels[i];
 
-            SDL2.SDL_FreeSurface(rgbaSurfaceHandle);
+            Handle = SDL2.SDL_CreateTextureFromSurface(
+                GraphicsManager.Renderer,
+                SurfaceHandle
+            );
         }
 
-        private void CreateEmpty(int width, int height, PixelFormat format, bool allocateImage)
+        private void CreateEmpty(int width, int height, PixelFormat format)
         {
             var pixelCount = width * height;
             var bytesPerPixel = 0;
@@ -659,6 +339,7 @@ namespace Chroma.Graphics
                 case PixelFormat.RGBA:
                 case PixelFormat.BGRA:
                 case PixelFormat.ABGR:
+                case PixelFormat.ARGB:
                     bytesPerPixel = 4;
                     break;
             }
@@ -667,15 +348,14 @@ namespace Chroma.Graphics
             BytesPerPixel = bytesPerPixel;
 
             _pixelData = new byte[pixelCount * bytesPerPixel];
-
-            if (allocateImage)
-            {
-                ImageHandle = SDL_gpu.GPU_CreateImage(
-                    (ushort)width,
-                    (ushort)height,
-                    (SDL_gpu.GPU_FormatEnum)format
-                );
-            }
+            
+            Handle = SDL2.SDL_CreateTexture(
+                GraphicsManager.Renderer,
+                (uint)format,
+                (int)Type,
+                width,
+                height
+            );
         }
 
         private Color ReadPixel(int i)
@@ -716,6 +396,13 @@ namespace Chroma.Graphics
                     c.B = _pixelData[i + 1];
                     c.A = _pixelData[i + 0];
                     break;
+                
+                case PixelFormat.ARGB:
+                    c.A = _pixelData[i + 0];
+                    c.R = _pixelData[i + 1];
+                    c.G = _pixelData[i + 2];
+                    c.B = _pixelData[i + 3];
+                    break;
 
                 default: throw new InvalidOperationException("Unsupported pixel format.");
             }
@@ -754,10 +441,17 @@ namespace Chroma.Graphics
                     break;
 
                 case PixelFormat.RGBA:
-                    _pixelData[i + 0] = c.R;
-                    _pixelData[i + 1] = c.G;
-                    _pixelData[i + 2] = c.B;
-                    _pixelData[i + 3] = c.A;
+                    _pixelData[i + 3] = c.R;
+                    _pixelData[i + 2] = c.G;
+                    _pixelData[i + 1] = c.B;
+                    _pixelData[i + 0] = c.A;
+                    break;
+                
+                case PixelFormat.ARGB:
+                    _pixelData[i + 0] = c.A;
+                    _pixelData[i + 1] = c.R;
+                    _pixelData[i + 2] = c.G;
+                    _pixelData[i + 3] = c.B;
                     break;
 
                 default: throw new InvalidOperationException("Unsupported pixel format.");
@@ -775,6 +469,13 @@ namespace Chroma.Graphics
         }
 
         protected override void FreeNativeResources()
-            => SDL_gpu.GPU_FreeImage(ImageHandle);
+        {
+            if (SurfaceHandle != IntPtr.Zero)
+            {
+                SDL2.SDL_FreeSurface(SurfaceHandle);
+            }
+            
+            SDL2.SDL_DestroyTexture(Handle);
+        }
     }
 }

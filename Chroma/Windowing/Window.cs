@@ -26,7 +26,7 @@ namespace Chroma.Windowing
         private Vector2 _position = new(SDL2.SDL_WINDOWPOS_CENTERED, SDL2.SDL_WINDOWPOS_CENTERED);
         private WindowState _state = WindowState.Normal;
 
-        private IntPtr _currentIconPtr;
+        private Texture _currentIconTexture;
 
         internal delegate void StateUpdateDelegate(float delta);
         internal delegate void DrawDelegate(RenderContext context);
@@ -37,8 +37,6 @@ namespace Chroma.Windowing
 
         internal Game Game { get; }
         internal EventDispatcher EventDispatcher { get; }
-
-        internal IntPtr RenderTargetHandle { get; }
 
         public bool Exists { get; private set; }
 
@@ -67,7 +65,8 @@ namespace Chroma.Windowing
                 {
                     if (Game.Graphics.ViewportAutoResize)
                     {
-                        SDL_gpu.GPU_SetWindowResolution((ushort)_size.Width, (ushort)_size.Height);
+                        // todo
+                        // SDL_gpu.GPU_SetWindowResolution((ushort)_size.Width, (ushort)_size.Height);
                     }
                     else
                     {
@@ -285,10 +284,7 @@ namespace Chroma.Windowing
             if (Handle == IntPtr.Zero)
                 throw new FrameworkException("Failed to initialize the window.", true);
 
-            SDL_gpu.GPU_SetRequiredFeatures(SDL_gpu.GPU_FeatureEnum.GPU_FEATURE_BASIC_SHADERS);
-            SDL_gpu.GPU_SetInitWindow(SDL2.SDL_GetWindowID(Handle));
-
-            RenderTargetHandle = Game.Graphics.InitializeRenderer(this);
+            Game.Graphics.InitializeRenderer(this);
 
             MaximumSize = Size.Empty;
             MinimumSize = Size.Empty;
@@ -337,7 +333,7 @@ namespace Chroma.Windowing
         public void GoWindowed(Size size, bool centerOnScreen = false)
         {
             SDL2.SDL_SetWindowFullscreen(Handle, 0);
-            SDL_gpu.GPU_SetWindowResolution((ushort)size.Width, (ushort)size.Height);
+            SDL2.SDL_SetWindowSize(Handle, size.Width, size.Height);
 
             Size = size;
 
@@ -350,27 +346,27 @@ namespace Chroma.Windowing
             if (texture.Disposed)
                 throw new InvalidOperationException("The texture provided was already disposed.");
 
-            if (_currentIconPtr != IntPtr.Zero)
-                SDL2.SDL_FreeSurface(_currentIconPtr);
+            if (_currentIconTexture != null)
+                _currentIconTexture.Dispose();
 
-            _currentIconPtr = texture.AsSdlSurface();
+            _currentIconTexture = texture;
 
             SDL2.SDL_SetWindowIcon(
                 Handle,
-                _currentIconPtr
+                _currentIconTexture.SurfaceHandle
             );
         }
 
-        public void SaveScreenshot(string path)
-        {
-            EnsureNotDisposed();
-
-            var surface = SDL_gpu.GPU_CopySurfaceFromTarget(RenderTargetHandle);
-            SDL2.SDL_LockSurface(surface);
-            SDL2.SDL_SaveBMP(surface, path);
-            SDL2.SDL_UnlockSurface(surface);
-            SDL2.SDL_FreeSurface(surface);
-        }
+        // public void SaveScreenshot(string path)
+        // {
+        //     EnsureNotDisposed();
+        //
+        //     var surface = SDL_gpu.GPU_CopySurfaceFromTarget(Renderer);
+        //     SDL2.SDL_LockSurface(surface);
+        //     SDL2.SDL_SaveBMP(surface, path);
+        //     SDL2.SDL_UnlockSurface(surface);
+        //     SDL2.SDL_FreeSurface(surface);
+        // }
 
         internal void Run(Action postStatusSetAction = null)
         {
@@ -398,15 +394,15 @@ namespace Chroma.Windowing
                 //
                 // This is a workaround for it until there's a better understanding of this bug.
                 //
-                SDL_gpu.GPU_BlitTransformX(
-                    EmbeddedAssets.DummyFixTexture.ImageHandle,
-                    IntPtr.Zero,
-                    RenderTargetHandle,
-                    -1, -1, 0, 0, 0, 1, 1
-                );
+                // SDL_gpu.GPU_BlitTransformX(
+                //     EmbeddedAssets.DummyFixTexture.ImageHandle,
+                //     IntPtr.Zero,
+                //     Renderer,
+                //     -1, -1, 0, 0, 0, 1, 1
+                // );
 
                 Draw?.Invoke(_renderContext);
-                SDL_gpu.GPU_Flip(RenderTargetHandle);
+                SDL2.SDL_RenderPresent(GraphicsManager.Renderer);
 
                 if (Game.Graphics.LimitFramerate)
                     Thread.Sleep(1);
@@ -424,7 +420,7 @@ namespace Chroma.Windowing
 
         internal void OnInvalidated()
         {
-            SDL_gpu.GPU_Flip(RenderTargetHandle);
+            SDL2.SDL_RenderPresent(GraphicsManager.Renderer);
             Invalidated?.Invoke(this, EventArgs.Empty);
         }
 
@@ -469,10 +465,11 @@ namespace Chroma.Windowing
         {
             if (Game.Graphics.ViewportAutoResize)
             {
-                SDL_gpu.GPU_SetWindowResolution(
-                    (ushort)e.Size.Width,
-                    (ushort)e.Size.Height
-                );
+                // todo
+                // SDL_gpu.GPU_SetWindowResolution(
+                //     (ushort)e.Size.Width,
+                //     (ushort)e.Size.Height
+                // );
             }
 
             Resized?.Invoke(this, e);
@@ -517,8 +514,7 @@ namespace Chroma.Windowing
 
         protected override void FreeNativeResources()
         {
-            SDL_gpu.GPU_FreeTarget(RenderTargetHandle);
-            SDL_gpu.GPU_Quit();
+            SDL2.SDL_DestroyWindow(Handle);
             SDL2.SDL_Quit();
         }
     }

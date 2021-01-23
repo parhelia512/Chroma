@@ -417,12 +417,7 @@ namespace Chroma.Graphics.TextRendering
                 0xFF000000
             );
             SDL2.SDL_SetSurfaceBlendMode(surface, SDL2.SDL_BlendMode.SDL_BLENDMODE_BLEND);
-            var gpuImage = SDL_gpu.GPU_CopyImageFromSurface(surface);
-
-            SDL2.SDL_FreeSurface(surface);
-            Marshal.FreeHGlobal(managedSurfaceData);
-
-            return new Texture(gpuImage);
+            return new Texture(surface);
         }
 
         private unsafe bool IsMonochromeBitSet(FT_GlyphSlotRec* glyph, int x, int y)

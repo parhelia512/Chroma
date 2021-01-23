@@ -34,7 +34,6 @@ namespace ParticleSystems
             _target = new RenderTarget(Window.Size.Width, Window.Size.Height);
             
             _particle = Content.Load<Texture>("Textures/pentagram.png");
-            _particle.FilteringMode = TextureFilteringMode.NearestNeighbor;
             _emitter = new ParticleEmitter(_particle);
             _emitter.Density = 300;
             _emitter.EmissionRate = 10;

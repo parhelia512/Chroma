@@ -12,10 +12,7 @@ namespace Chroma.Natives.Boot.Config
         [JsonPropertyName("skip_checksum_verification")]
         public bool SkipChecksumVerification { get; set; }
 
-        [JsonPropertyName("enable_sdlgpu_debug")]
-        public bool EnableSdlGpuDebugging { get; set; }
-        
         [JsonPropertyName("sdl_modules")]
-        public SdlModuleConfig SdlModules { get; private set; } = new SdlModuleConfig();
+        public SdlModuleConfig SdlModules { get; private set; } = new();
     }
 }

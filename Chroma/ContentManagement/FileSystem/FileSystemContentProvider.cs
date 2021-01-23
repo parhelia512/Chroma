@@ -5,7 +5,7 @@ using System.Numerics;
 using System.Reflection;
 using Chroma.Audio.Sources;
 using Chroma.Graphics;
-using Chroma.Graphics.Accelerated;
+// using Chroma.Graphics.Accelerated;
 using Chroma.Graphics.TextRendering;
 using Chroma.Graphics.TextRendering.Bitmap;
 using Chroma.Input;
@@ -123,9 +123,9 @@ namespace Chroma.ContentManagement.FileSystem
         private void RegisterImporters()
         {
             RegisterImporter<Texture>((path, _) => new Texture(path));
-            RegisterImporter<PixelShader>((path, _) => PixelShader.FromFile(path));
-            RegisterImporter<VertexShader>((path, _) => VertexShader.FromFile(path));
-            RegisterImporter<Effect>((path, _) => Effect.FromFile(path));
+            // RegisterImporter<PixelShader>((path, _) => PixelShader.FromFile(path));
+            // RegisterImporter<VertexShader>((path, _) => VertexShader.FromFile(path));
+            // RegisterImporter<Effect>((path, _) => Effect.FromFile(path));
             RegisterImporter<BitmapFont>((path, _) => new BitmapFont(path));
             RegisterImporter<Sound>((path, _) => new Sound(path));
             RegisterImporter<Music>((path, _) => new Music(path));

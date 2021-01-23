@@ -10,9 +10,10 @@ namespace Chroma
     internal class DefaultScene
     {
         private Game Game { get; }
-        
+
         private static readonly string _welcomeMessage =
             "Welcome to Chroma Framework.\nTo get started, override Draw and Update methods.";
+
         private static readonly string _versionString = $"v{Assembly.GetExecutingAssembly().GetName().Version}";
         private float _betaEmblemHue;
 
@@ -43,12 +44,12 @@ namespace Chroma
 
             context.DrawString(
                 _welcomeMessage,
-                new Vector2(8), (_, i, _, _) =>
+                new Vector2(8), (_, i, p, _) =>
                 {
                     var ranges = _welcomeMessage.FindWordRanges("Draw", "Update");
                     var color = Color.White;
                     var yOff = 0f;
-                    
+
                     foreach (var range in ranges)
                     {
                         if (range.Includes(i))
@@ -60,7 +61,7 @@ namespace Chroma
 
                     return new GlyphTransformData
                     {
-                        Position = new Vector2(0, yOff),
+                        Position = p + new Vector2(0, yOff),
                         Color = color
                     };
                 }

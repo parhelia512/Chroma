@@ -42,7 +42,7 @@ namespace Textures
             Content = new FileSystemContentProvider(
                 Path.Combine(AppContext.BaseDirectory, "../../../../_common")
             );
-            
+
             Graphics.LimitFramerate = false;
             Cursor.IsVisible = false;
         }
@@ -55,8 +55,8 @@ namespace Textures
             _burger = Content.Load<Texture>("Textures/burg.png");
             _virtRes = new Size(_burger.Width, _burger.Height);
 
-            _dynTex = new Texture(256, 256);
-            _dynTex.FilteringMode = TextureFilteringMode.NearestNeighbor;
+            _dynTex = new Texture(256, 256, TextureType.Streaming, PixelFormat.RGBA);
+            //  _dynTex.FilteringMode = TextureFilteringMode.NearestNeighbor;
         }
 
         protected override void Draw(RenderContext context)
@@ -75,7 +75,7 @@ namespace Textures
                 _dynTex,
                 Window.Center + new Vector2(127, 0),
                 Vector2.One,
-                Vector2.Zero, 
+                Vector2.Zero,
                 0
             );
 
@@ -96,7 +96,7 @@ namespace Textures
 
             context.DrawTexture(
                 _burger,
-                Mouse.GetPosition() + _burger.Center + new Vector2(0, 5 * MathF.Sin(_wave)),
+                Mouse.GetPosition() - _burger.Center + new Vector2(0, 5 * MathF.Sin(_wave)),
                 Vector2.One,
                 _burger.Center,
                 _rotation
@@ -115,16 +115,16 @@ namespace Textures
                 for (var x = 0; x < _dynTex.Width; x++)
                 {
                     var mod = x / (y + 1);
-
+                    
                     if (y > 127)
                         mod = x * y;
-
+                    
                     if (x > 127)
                         mod = (x + y) / 2;
-
+                    
                     if (x > 127 && y < 127)
                         mod = (int)(Math.Abs(x / 2 - y / 2) + (5 * MathF.Sin(_wave)));
-
+                    
                     _dynTex[x, y] = _colors[((int)PerformanceCounter.LifetimeFrames + mod) % _colors.Length];
                 }
             }
@@ -144,45 +144,25 @@ namespace Textures
                 if (_currentTileIndex < 0)
                     _currentTileIndex = _totalTiles - 1;
             }
-            else if (e.KeyCode == KeyCode.NumPlus)
-            {
-                _burger.VirtualResolution = _virtRes = new Size(_virtRes.Width + 32, _virtRes.Height + 32);
-            }
-            else if (e.KeyCode == KeyCode.NumMinus)
-            {
-                if (_virtRes.Width <= 0 || _virtRes.Height <= 0) return;
-
-                _burger.VirtualResolution = _virtRes = new Size(_virtRes.Width - 32, _virtRes.Height - 32);
-            }
-            else if (e.KeyCode == KeyCode.F1)
-            {
-                _burger.VirtualResolution = _virtRes = new Size(_burger.Width, _burger.Height);
-            }
             else if (e.KeyCode == KeyCode.F2)
             {
-                _burger.SetBlendingMode(BlendingPreset.Add);
+                _burger.SetBlending(BlendingMode.Add);
             }
             else if (e.KeyCode == KeyCode.F3)
             {
-                _burger.SetBlendingFunctions(
-                    BlendingFunction.One,
-                    BlendingFunction.OneMinusSourceAlpha,
-                    BlendingFunction.DestinationAlpha,
-                    BlendingFunction.One
-                );
-
-                _burger.SetBlendingEquations(
-                    BlendingEquation.ReverseSubtract,
-                    BlendingEquation.ReverseSubtract
-                );
+                _burger.SetBlending(BlendingMode.Modulate);
             }
             else if (e.KeyCode == KeyCode.F4)
             {
-                _burger.SetBlendingMode(BlendingPreset.Multiply);
+                _burger.SetBlending(BlendingMode.Multiply);
             }
             else if (e.KeyCode == KeyCode.F5)
             {
-                _burger.SetBlendingMode(BlendingPreset.Normal);
+                _burger.SetBlending(BlendingMode.AlphaBlend);
+            }
+            else if (e.KeyCode == KeyCode.F6)
+            {
+                _burger.SetBlending(BlendingMode.None);
             }
         }
     }

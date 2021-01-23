@@ -77,7 +77,6 @@ namespace Chroma
             Content.Dispose();
 
             AudioManager.Instance.Close();
-            SDL_gpu.GPU_Quit();
             SDL2.SDL_Quit();
 
             Environment.Exit(0);

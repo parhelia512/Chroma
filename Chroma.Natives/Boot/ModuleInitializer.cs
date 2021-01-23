@@ -120,12 +120,6 @@ namespace Chroma.Natives.Boot
             
             Console.WriteLine("Initializing SDL2 core...");
             SDL2.SDL_Init(BootConfig.SdlModules.SdlInitFlags);
-            
-            if (BootConfig.EnableSdlGpuDebugging)
-            {
-                Console.WriteLine("Enabling SDL_gpu debugging...");
-                SDL_gpu.GPU_SetDebugLevel(SDL_gpu.GPU_DebugLevelEnum.GPU_DEBUG_LEVEL_MAX);
-            }
         }
     }
 }

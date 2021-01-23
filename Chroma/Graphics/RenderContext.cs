@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Linq;
 using System.Numerics;
 using Chroma.Graphics.Batching;
 using Chroma.Graphics.TextRendering;
 using Chroma.Graphics.TextRendering.Bitmap;
+using Chroma.Natives.GL;
 using Chroma.Natives.SDL;
 using Chroma.Windowing;
 
@@ -13,7 +15,6 @@ namespace Chroma.Graphics
     public class RenderContext
     {
         private float _lineThickness;
-        private bool _shapeBlendingEnabled;
 
         private Rectangle _scissor = System.Drawing.Rectangle.Empty;
 
@@ -24,38 +25,15 @@ namespace Chroma.Graphics
 
         internal Stack<IntPtr> TargetStack { get; }
 
-        public RenderTransform Transform { get; }
-
-        public bool RenderingToWindow
-            => CurrentRenderTarget == Owner.RenderTargetHandle;
-
         public float LineThickness
         {
             get => _lineThickness;
             set
             {
                 _lineThickness = value;
-                SDL_gpu.GPU_SetLineThickness(_lineThickness);
+                Gl.LineWidth(value);
             }
         }
-
-        public bool ShapeBlendingEnabled
-        {
-            get => _shapeBlendingEnabled;
-            set
-            {
-                _shapeBlendingEnabled = value;
-                SDL_gpu.GPU_SetShapeBlending(_shapeBlendingEnabled);
-            }
-        }
-
-        public BlendingFunction ShapeSourceColorBlendingFunction { get; private set; }
-        public BlendingFunction ShapeSourceAlphaBlendingFunction { get; private set; }
-        public BlendingFunction ShapeDestinationColorBlendingFunction { get; private set; }
-        public BlendingFunction ShapeDestinationAlphaBlendingFunction { get; private set; }
-
-        public BlendingEquation ShapeColorBlendingEquation { get; private set; }
-        public BlendingEquation ShapeAlphaBlendingEquation { get; private set; }
 
         public Rectangle Scissor
         {
@@ -63,19 +41,27 @@ namespace Chroma.Graphics
             set
             {
                 _scissor = value;
-
+        
                 if (_scissor == System.Drawing.Rectangle.Empty)
                 {
-                    SDL_gpu.GPU_UnsetClip(CurrentRenderTarget);
+                    SDL2.SDL_RenderSetClipRect(
+                        GraphicsManager.Renderer,
+                        IntPtr.Zero
+                    );
                 }
                 else
                 {
-                    SDL_gpu.GPU_SetClip(
-                        CurrentRenderTarget,
-                        (short)_scissor.X,
-                        (short)_scissor.Y,
-                        (ushort)_scissor.Width,
-                        (ushort)_scissor.Height
+                    var rect = new SDL2.SDL_Rect
+                    {
+                        x = (int)_scissor.X,
+                        y = (int)_scissor.Y,
+                        w = (int)_scissor.Width,
+                        h = (int)_scissor.Height
+                    };
+
+                    SDL2.SDL_RenderSetClipRect(
+                        GraphicsManager.Renderer,
+                        ref rect
                     );
                 }
             }
@@ -86,198 +72,25 @@ namespace Chroma.Graphics
             Owner = owner;
 
             TargetStack = new Stack<IntPtr>();
-            TargetStack.Push(owner.RenderTargetHandle);
-
             BatchBuffer = new List<BatchInfo>();
-
-            SDL_gpu.GPU_SetDefaultAnchor(0, 0);
-
-            Transform = new RenderTransform(this);
-
-            ShapeBlendingEnabled = false;
-            ResetShapeBlending();
-        }
-
-        public void SetShapeBlendingEquations(BlendingEquation colorBlend, BlendingEquation alphaBlend)
-        {
-            ShapeColorBlendingEquation = colorBlend;
-            ShapeAlphaBlendingEquation = alphaBlend;
-
-            SDL_gpu.GPU_SetShapeBlendEquation(
-                (SDL_gpu.GPU_BlendEqEnum)colorBlend,
-                (SDL_gpu.GPU_BlendEqEnum)alphaBlend
-            );
-        }
-
-        public void SetShapeBlendingFunctions(BlendingFunction sourceColorBlend, BlendingFunction sourceAlphaBlend,
-            BlendingFunction destinationColorBlend, BlendingFunction destinationAlphaBlend)
-        {
-            ShapeSourceColorBlendingFunction = sourceColorBlend;
-            ShapeSourceAlphaBlendingFunction = sourceAlphaBlend;
-
-            ShapeDestinationColorBlendingFunction = destinationColorBlend;
-            ShapeDestinationAlphaBlendingFunction = destinationAlphaBlend;
-
-            SDL_gpu.GPU_SetShapeBlendFunction(
-                (SDL_gpu.GPU_BlendFuncEnum)sourceColorBlend,
-                (SDL_gpu.GPU_BlendFuncEnum)destinationColorBlend,
-                (SDL_gpu.GPU_BlendFuncEnum)sourceAlphaBlend,
-                (SDL_gpu.GPU_BlendFuncEnum)destinationAlphaBlend
-            );
-        }
-
-        public void SetShapeBlendingPreset(BlendingPreset preset)
-        {
-            var gpuPreset = (SDL_gpu.GPU_BlendPresetEnum)preset;
-            var blendModeInfo = SDL_gpu.GPU_GetBlendModeFromPreset(gpuPreset);
-
-            ShapeSourceColorBlendingFunction = (BlendingFunction)blendModeInfo.source_color;
-            ShapeSourceAlphaBlendingFunction = (BlendingFunction)blendModeInfo.source_alpha;
-
-            ShapeDestinationColorBlendingFunction = (BlendingFunction)blendModeInfo.dest_color;
-            ShapeDestinationAlphaBlendingFunction = (BlendingFunction)blendModeInfo.dest_alpha;
-
-            ShapeColorBlendingEquation = (BlendingEquation)blendModeInfo.color_equation;
-            ShapeAlphaBlendingEquation = (BlendingEquation)blendModeInfo.alpha_equation;
-
-            SDL_gpu.GPU_SetShapeBlendMode(gpuPreset);
-        }
-
-        public void ResetShapeBlending()
-            => SetShapeBlendingPreset(BlendingPreset.Normal);
-
-        public void WithCamera(Camera camera, Action drawingLogic)
-        {
-            if (camera == null)
-                throw new ArgumentNullException(nameof(camera), "Camera cannot be null.");
-
-            SDL_gpu.GPU_SetCamera(CurrentRenderTarget, ref camera.GpuCamera);
-
-            drawingLogic?.Invoke();
-
-            SDL_gpu.GPU_SetCamera(CurrentRenderTarget, IntPtr.Zero);
         }
 
         public void Clear(Color color)
-            => SDL_gpu.GPU_ClearRGBA(CurrentRenderTarget, color.R, color.G, color.B, color.A);
-
-        public void Arc(ShapeMode mode, Vector2 position, float radius, float startAngle, float endAngle, Color color)
         {
-            if (mode == ShapeMode.Stroke)
-            {
-                SDL_gpu.GPU_Arc(
-                    CurrentRenderTarget,
-                    position.X,
-                    position.Y,
-                    radius,
-                    startAngle,
-                    endAngle,
-                    Color.ToSdlColor(color)
-                );
-            }
-            else if (mode == ShapeMode.Fill)
-            {
-                SDL_gpu.GPU_ArcFilled(
-                    CurrentRenderTarget,
-                    position.X,
-                    position.Y,
-                    radius,
-                    startAngle,
-                    endAngle,
-                    Color.ToSdlColor(color)
-                );
-            }
-        }
-
-        public void Circle(ShapeMode mode, Vector2 position, float radius, Color color)
-        {
-            if (mode == ShapeMode.Stroke)
-            {
-                SDL_gpu.GPU_Circle(
-                    CurrentRenderTarget,
-                    position.X,
-                    position.Y,
-                    radius,
-                    Color.ToSdlColor(color)
-                );
-            }
-            else if (mode == ShapeMode.Fill)
-            {
-                SDL_gpu.GPU_CircleFilled(
-                    CurrentRenderTarget,
-                    position.X,
-                    position.Y,
-                    radius,
-                    Color.ToSdlColor(color)
-                );
-            }
-        }
-
-        public void Ellipse(ShapeMode mode, Vector2 position, Vector2 radii, float rotation, Color color)
-        {
-            if (mode == ShapeMode.Stroke)
-            {
-                SDL_gpu.GPU_Ellipse(
-                    CurrentRenderTarget,
-                    position.X,
-                    position.Y,
-                    radii.X,
-                    radii.Y,
-                    rotation,
-                    Color.ToSdlColor(color)
-                );
-            }
-            else if (mode == ShapeMode.Fill)
-            {
-                SDL_gpu.GPU_EllipseFilled(
-                    CurrentRenderTarget,
-                    position.X,
-                    position.Y,
-                    radii.X,
-                    radii.Y,
-                    rotation,
-                    Color.ToSdlColor(color)
-                );
-            }
+            SetColor(color);
+            SDL2.SDL_RenderClear(GraphicsManager.Renderer);
         }
 
         public void Line(Vector2 start, Vector2 end, Color color)
-            => SDL_gpu.GPU_Line(CurrentRenderTarget, start.X, start.Y, end.X, end.Y, Color.ToSdlColor(color));
+        {
+            SetColor(color);
+            SDL2.SDL_RenderDrawLineF(GraphicsManager.Renderer, start.X, start.Y, end.X, end.Y);
+        }
 
         public void Pixel(Vector2 position, Color color)
-            => SDL_gpu.GPU_Pixel(CurrentRenderTarget, position.X, position.Y, Color.ToSdlColor(color));
-
-        public Color GetPixel(Vector2 position)
-            => Color.FromSdlColor(SDL_gpu.GPU_GetPixel(CurrentRenderTarget, (short)position.X, (short)position.Y));
-
-        public void Polygon(ShapeMode mode, List<Point> vertices, Color color)
         {
-            var floatArray = new float[vertices.Count * 2];
-
-            for (var i = 0; i < vertices.Count; i++)
-            {
-                floatArray[i * 2] = vertices[i].X;
-                floatArray[i * 2 + 1] = vertices[i].Y;
-            }
-
-            if (mode == ShapeMode.Stroke)
-            {
-                SDL_gpu.GPU_Polygon(
-                    CurrentRenderTarget,
-                    (uint)vertices.Count,
-                    floatArray,
-                    Color.ToSdlColor(color)
-                );
-            }
-            else if (mode == ShapeMode.Fill)
-            {
-                SDL_gpu.GPU_PolygonFilled(
-                    CurrentRenderTarget,
-                    (uint)vertices.Count,
-                    floatArray,
-                    Color.ToSdlColor(color)
-                );
-            }
+            SetColor(color);
+            SDL2.SDL_RenderDrawPointF(GraphicsManager.Renderer, position.X, position.Y);
         }
 
         public void Polyline(List<Point> vertices, Color color, bool closeLoop)
@@ -306,26 +119,27 @@ namespace Chroma.Graphics
 
         public void Rectangle(ShapeMode mode, Vector2 position, float width, float height, Color color)
         {
+            var rect = new SDL2.SDL_FRect
+            {
+                x = position.X,
+                y = position.Y,
+                w = width,
+                h = height
+            };
+
+            SetColor(color);
             if (mode == ShapeMode.Stroke)
             {
-                SDL_gpu.GPU_Rectangle(
-                    CurrentRenderTarget,
-                    position.X,
-                    position.Y,
-                    position.X + width,
-                    position.Y + height,
-                    Color.ToSdlColor(color)
+                SDL2.SDL_RenderDrawRectF(
+                    GraphicsManager.Renderer,
+                    ref rect
                 );
             }
             else if (mode == ShapeMode.Fill)
             {
-                SDL_gpu.GPU_RectangleFilled(
-                    CurrentRenderTarget,
-                    position.X,
-                    position.Y,
-                    position.X + width,
-                    position.Y + height,
-                    Color.ToSdlColor(color)
+                SDL2.SDL_RenderFillRectF(
+                    GraphicsManager.Renderer,
+                    ref rect
                 );
             }
         }
@@ -342,63 +156,46 @@ namespace Chroma.Graphics
                 color
             );
 
-        public void Triangle(ShapeMode mode, Vector2 a, Vector2 b, Vector2 c, Color color)
-        {
-            if (mode == ShapeMode.Stroke)
-            {
-                SDL_gpu.GPU_Tri(
-                    CurrentRenderTarget,
-                    a.X, a.Y,
-                    b.X, b.Y,
-                    c.X, c.Y,
-                    Color.ToSdlColor(color)
-                );
-            }
-            else if (mode == ShapeMode.Fill)
-            {
-                SDL_gpu.GPU_TriFilled(
-                    CurrentRenderTarget,
-                    a.X, a.Y,
-                    b.X, b.Y,
-                    c.X, c.Y,
-                    Color.ToSdlColor(color)
-                );
-            }
-        }
-
-        public void ArbitraryGeometry(Texture texture, ushort vertexCount, float[] renderData, ushort[] indices)
-        {
-            SDL_gpu.GPU_TriangleBatch(
-                texture.ImageHandle,
-                CurrentRenderTarget,
-                vertexCount,
-                renderData,
-                (ushort)indices.Length,
-                indices,
-                SDL_gpu.GPU_BatchFlagEnum.GPU_BATCH_XY_ST_RGBA
-            );
-        }
-
         public void DrawTexture(Texture texture, Vector2 position, Vector2 scale, Vector2 origin, float rotation)
         {
-            SDL_gpu.GPU_BlitTransformX(
-                texture.ImageHandle,
-                IntPtr.Zero,
-                CurrentRenderTarget,
-                position.X,
-                position.Y,
-                origin.X,
-                origin.Y,
+            // todo scale
+            var srcRect = new SDL2.SDL_Rect
+            {
+                x = 0,
+                y = 0,
+                w = texture.Width,
+                h = texture.Height
+            };
+            
+            var dstRect = new SDL2.SDL_FRect
+            {
+                x = position.X,
+                y = position.Y,
+                w = texture.Width,
+                h = texture.Height
+            };
+
+            var center = new SDL2.SDL_FPoint
+            {
+                x = origin.X,
+                y = origin.Y,
+            };
+
+            SDL2.SDL_RenderCopyExF(
+                GraphicsManager.Renderer,
+                texture.Handle,
+                ref srcRect,
+                ref dstRect,
                 rotation,
-                scale.X,
-                scale.Y
+                ref center,
+                SDL2.SDL_RendererFlip.SDL_FLIP_NONE
             );
         }
 
         public void DrawTexture(Texture texture, Vector2 position, Vector2 scale, Vector2 origin, float rotation,
             Rectangle sourceRectangle)
         {
-            var rect = new SDL_gpu.GPU_Rect
+            var srcRect = new SDL2.SDL_Rect()
             {
                 x = sourceRectangle.X,
                 y = sourceRectangle.Y,
@@ -406,17 +203,28 @@ namespace Chroma.Graphics
                 h = sourceRectangle.Height
             };
 
-            SDL_gpu.GPU_BlitTransformX(
-                texture.ImageHandle,
-                ref rect,
-                CurrentRenderTarget,
-                position.X,
-                position.Y,
-                origin.X,
-                origin.Y,
+            var dstRect = new SDL2.SDL_FRect
+            {
+                x = position.X,
+                y = position.Y,
+                w = sourceRectangle.Width,
+                h = sourceRectangle.Height
+            };
+
+            var center = new SDL2.SDL_FPoint
+            {
+                x = origin.X,
+                y = origin.Y,
+            };
+
+            SDL2.SDL_RenderCopyExF(
+                GraphicsManager.Renderer,
+                texture.Handle,
+                ref srcRect,
+                ref dstRect,
                 rotation,
-                scale.X,
-                scale.Y
+                ref center,
+                SDL2.SDL_RendererFlip.SDL_FLIP_NONE
             );
         }
 
@@ -426,9 +234,31 @@ namespace Chroma.Graphics
                 throw new ArgumentNullException(nameof(target),
                     "You can't just draw an image to a null render target...");
 
-            TargetStack.Push(target.TargetHandle);
+            TargetStack.Push(target.Handle);
+            SDL2.SDL_SetRenderTarget(
+                GraphicsManager.Renderer,
+                target.Handle
+            );
+            
             drawingLogic?.Invoke();
+
             TargetStack.Pop();
+
+            if (TargetStack.Any())
+            {
+                var previousTarget = TargetStack.Peek();
+                SDL2.SDL_SetRenderTarget(
+                    GraphicsManager.Renderer,
+                    previousTarget
+                );
+            }
+            else
+            {
+                SDL2.SDL_SetRenderTarget(
+                    GraphicsManager.Renderer,
+                    IntPtr.Zero
+                );
+            }
         }
 
         public void DrawString(BitmapFont font, string text, Vector2 position,
@@ -454,12 +284,20 @@ namespace Chroma.Graphics
 
                 var glyph = font.Glyphs[c];
 
-                var rect = new SDL_gpu.GPU_Rect
+                var srcRect = new SDL2.SDL_Rect
                 {
                     x = glyph.BitmapX,
                     y = glyph.BitmapY,
                     w = glyph.Width,
                     h = glyph.Height
+                };
+
+                var dstRect = new SDL2.SDL_FRect
+                {
+                    x = position.X,
+                    y = position.Y,
+                    w = srcRect.w,
+                    h = srcRect.h
                 };
 
                 var pageTexture = font.Pages[glyph.Page].Texture;
@@ -474,36 +312,39 @@ namespace Chroma.Graphics
                 }
 
                 var pos = new Vector2(
-                    x + glyph.OffsetX + kerningAmount, 
+                    x + glyph.OffsetX + kerningAmount,
                     y + glyph.OffsetY
                 );
-                
+
                 var transform = new GlyphTransformData(pos);
 
                 if (glyphTransform != null)
                     transform = glyphTransform(c, i, pos, glyph);
 
-                SDL_gpu.GPU_SetColor(pageTexture.ImageHandle, Color.ToSdlColor(transform.Color));
-                SDL_gpu.GPU_BlitTransformX(
-                    pageTexture.ImageHandle,
-                    ref rect,
-                    CurrentRenderTarget,
-                    transform.Position.X,
-                    transform.Position.Y,
-                    transform.Origin.X,
-                    transform.Origin.Y,
-                    transform.Rotation,
-                    transform.Scale.X,
-                    transform.Scale.Y
-                );
-                SDL_gpu.GPU_SetColor(pageTexture.ImageHandle, Color.ToSdlColor(Color.White));
+                pageTexture.ColorMask = transform.Color;
+                var center = new SDL2.SDL_FPoint
+                {
+                    x = transform.Origin.X,
+                    y = transform.Origin.Y,
+                };
 
+                SDL2.SDL_RenderCopyExF(
+                    GraphicsManager.Renderer,
+                    pageTexture.Handle,
+                    ref srcRect,
+                    ref dstRect,
+                    transform.Rotation,
+                    ref center,
+                    SDL2.SDL_RendererFlip.SDL_FLIP_NONE
+                );
+
+                pageTexture.ColorMask = Color.White;
                 x += glyph.HorizontalAdvance;
             }
         }
 
         public void DrawString(BitmapFont font, string text, Vector2 position, Color color)
-            => DrawString(font, text, position, (_, _, _, _) => new GlyphTransformData {Color = color});
+            => DrawString(font, text, position, (_, _, p, _) => new GlyphTransformData(p) {Color = color});
 
         public void DrawString(string text, Vector2 position,
             TrueTypeFontGlyphTransform perCharTransform = null)
@@ -511,7 +352,7 @@ namespace Chroma.Graphics
 
         public void DrawString(string text, Vector2 position, Color color)
             => DrawString(EmbeddedAssets.DefaultFont, text, position,
-                (_, _, _, _) => new GlyphTransformData {Color = color});
+                (_, _, p, _) => new GlyphTransformData(p) {Color = color});
 
         public void DrawString(TrueTypeFont font, string text, Vector2 position,
             TrueTypeFontGlyphTransform glyphTransform = null)
@@ -536,22 +377,14 @@ namespace Chroma.Graphics
 
                 var info = font.RenderInfo[c];
 
-                var srcRect = new SDL_gpu.GPU_Rect
+                var srcRect = new SDL2.SDL_Rect
                 {
-                    x = info.Position.X,
-                    y = info.Position.Y,
-                    w = info.BitmapSize.X,
-                    h = info.BitmapSize.Y
+                    x = (int)info.Position.X,
+                    y = (int)info.Position.Y,
+                    w = (int)info.BitmapSize.X,
+                    h = (int)info.BitmapSize.Y
                 };
 
-                // info.Size.X / 2 and info.Size.Y / 2
-                // to compensate for blitting anchor.
-                // for some reason settings the blitting anchor to [0, 0]
-                // makes the entire text blurry at time of blitting
-                //
-                // 12 apr 2020: fixed by setting Texture snapping mode to
-                // TextureSnappingMode.None by default, along with
-                // defaulting the anchor to 0.
                 var xPos = x + info.Bearing.X;
                 var yPos = y - info.Bearing.Y + font.MaxBearing;
 
@@ -566,21 +399,33 @@ namespace Chroma.Graphics
 
                 if (glyphTransform != null)
                     transform = glyphTransform(c, i, pos, info);
+                
+                var dstRect = new SDL2.SDL_FRect
+                {
+                    x = transform.Position.X,
+                    y = transform.Position.Y,
+                    w = srcRect.w,
+                    h = srcRect.h
+                };
 
-                SDL_gpu.GPU_SetColor(font.Atlas.ImageHandle, Color.ToSdlColor(transform.Color));
-                SDL_gpu.GPU_BlitTransformX(
-                    font.Atlas.ImageHandle,
+                var center = new SDL2.SDL_FPoint
+                {
+                    x = transform.Origin.X,
+                    y = transform.Origin.Y,
+                };
+                
+                font.Atlas.ColorMask = transform.Color;
+
+                SDL2.SDL_RenderCopyExF(
+                    GraphicsManager.Renderer,
+                    font.Atlas.Handle,
                     ref srcRect,
-                    CurrentRenderTarget,
-                    transform.Position.X,
-                    transform.Position.Y,
-                    transform.Origin.X,
-                    transform.Origin.Y,
+                    ref dstRect,
                     transform.Rotation,
-                    transform.Scale.X,
-                    transform.Scale.Y
+                    ref center,
+                    SDL2.SDL_RendererFlip.SDL_FLIP_NONE
                 );
-                SDL_gpu.GPU_SetColor(font.Atlas.ImageHandle, Color.ToSdlColor(Color.White));
+                font.Atlas.ColorMask = Color.White;
 
                 x += info.Advance.X;
             }
@@ -615,6 +460,17 @@ namespace Chroma.Graphics
                     DrawAction = drawAction,
                     Depth = depth
                 }
+            );
+        }
+
+        public void SetColor(Color color)
+        {
+            SDL2.SDL_SetRenderDrawColor(
+                GraphicsManager.Renderer,
+                color.R,
+                color.G,
+                color.B,
+                color.A
             );
         }
     }

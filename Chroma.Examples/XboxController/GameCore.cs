@@ -20,7 +20,6 @@ namespace XboxController
         protected override void LoadContent()
         {
             _tgt = new RenderTarget(32, 32);
-            _tgt.FilteringMode = TextureFilteringMode.NearestNeighbor;
         }
 
         protected override void Draw(RenderContext context)

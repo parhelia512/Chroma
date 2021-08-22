@@ -2,11 +2,9 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Numerics;
-using System.Reflection;
 using Chroma.Audio.Sources;
 using Chroma.Graphics;
 using Chroma.Graphics.Accelerated;
-using Chroma.Graphics.TextRendering;
 using Chroma.Graphics.TextRendering.Bitmap;
 using Chroma.Graphics.TextRendering.TrueType;
 using Chroma.Input;

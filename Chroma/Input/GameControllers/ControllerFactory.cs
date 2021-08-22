@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using Chroma.Hardware;
 using Chroma.Input.GameControllers.Drivers;
-using Chroma.Natives.SDL;
 
 namespace Chroma.Input.GameControllers
 {
